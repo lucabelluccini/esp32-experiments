@@ -48,11 +48,16 @@ const char* krakenCaCert = \
 "7IXOMCVZuoFwNLg0f+cB0eLLUg==\n" \ 
 "-----END CERTIFICATE-----\n";
 
+const int refreshIntervalSeconds = 60;
+
 // Get it via http://arduinojson.org/assistant/
 const size_t bufferSize = JSON_ARRAY_SIZE(0) + 6*JSON_ARRAY_SIZE(2) + 2*JSON_ARRAY_SIZE(3) + JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(9) + 250;
 DynamicJsonBuffer jsonBuffer(bufferSize);
 
 struct KrakenData {
+  bool   error;
+  bool   parsed;
+  String rawData;
   String timestamp;
   double lastValue;
   double lowValue;
@@ -111,9 +116,10 @@ void setup()
   setupLcd();
 }
 
-bool readDataFromKraken(const char* json)
+bool readDataFromKraken()
 {
-  JsonObject& root = jsonBuffer.parseObject(json);
+  krakenData.parsed = false;
+  JsonObject& root = jsonBuffer.parseObject(krakenData.rawData.c_str());
   if (root.success() && root.containsKey("result"))
   {
     JsonObject& dataForXBTEUR = root["result"]["XXBTZEUR"];
@@ -122,16 +128,29 @@ bool readDataFromKraken(const char* json)
     krakenData.highValue = dataForXBTEUR["h"][0].as<double>();
     USE_SERIAL.printf("Timestamp: %s\n", krakenData.timestamp.c_str());
     USE_SERIAL.printf("Last: %5.0f Low: %5.0f High: %5.0f\n", krakenData.lastValue, krakenData.lowValue, krakenData.highValue);
-    return true;
+    krakenData.parsed = true;
   }
-  return false;
+  return krakenData.parsed;
+}
+
+void writeToLcd(const char * line1, const char * line2)
+{
+  lcd.clear();
+  if(line1 != NULL)
+  {
+    lcd.print(line1);
+  }
+  if(line2 != NULL)
+  {
+    lcd.print(line2);
+  }
 }
 
 void writeToLcd()
 {
   lcd.clear();
   size_t dateOnlyOffset(krakenData.timestamp.length()-12);
-  lcd.printf("%s", krakenData.timestamp.substring(dateOnlyOffset).c_str());
+  lcd.printf("%12s[%c%c]", krakenData.timestamp.substring(dateOnlyOffset).c_str(), (krakenData.error? '!' : ' '), (krakenData.parsed? ' ' : '!'));
   USE_SERIAL.printf("Timestamp shortened: %s\n", krakenData.timestamp.substring(dateOnlyOffset).c_str());
   lcd.setCursor(0,1);
   lcd.printf("%.0f %c%.0f %c%.0f", krakenData.lastValue, (uint8_t)ARROWDOWN, krakenData.lowValue, (uint8_t)ARROWUP, krakenData.highValue);
@@ -139,44 +158,48 @@ void writeToLcd()
 
 void loop() {
   if((wifiMulti.run() == WL_CONNECTED)) {
-
-      http.begin(krakenApiUrl, krakenCaCert);
-      const char * headerKeys[] = {"date", } ;
-      size_t headerKeysSize = sizeof(headerKeys)/sizeof(headerKeys[0]);
-      http.collectHeaders(headerKeys, headerKeysSize);
-      const int httpCode = http.GET();
-      if(httpCode > 0) {
-          if(httpCode == HTTP_CODE_OK) {
-            USE_SERIAL.printf("[HTTP] OK\n");
-            String data = http.getString();
-            if(http.hasHeader("date"))
-            {
-              krakenData.timestamp = http.header("date");
-            }
-            else
-            {
-              krakenData.timestamp = "Timestamp N/A";
-              USE_SERIAL.printf("Timestamp N/A\n");
-            }
-            if(readDataFromKraken(data.c_str()))
-            {
-              writeToLcd();
-            }
-          }
-          else
-          {
-            USE_SERIAL.printf("[HTTP] Error: %s\n", http.errorToString(httpCode).c_str());
-          }
-      } else {
-          USE_SERIAL.printf("[HTTP] Error: %s\n", http.errorToString(httpCode).c_str());
+    krakenData.error = true;
+    krakenData.rawData = "";
+    http.begin(krakenApiUrl, krakenCaCert);
+    const char * headerKeys[] = {"date", } ;
+    size_t headerKeysSize = sizeof(headerKeys)/sizeof(headerKeys[0]);
+    http.collectHeaders(headerKeys, headerKeysSize);
+    const int httpCode = http.GET();
+    if(httpCode > 0) {
+      if(httpCode == HTTP_CODE_OK) {
+        krakenData.error = false;
+        USE_SERIAL.printf("[HTTP] OK\n");
+        krakenData.rawData = http.getString();
+        USE_SERIAL.printf("Data: %s\n", krakenData.rawData.c_str());
+        if(http.hasHeader("date"))
+        {
+          krakenData.timestamp = http.header("date");
+        }
+        else
+        {
+          krakenData.timestamp = "N/A Timestamp";
+          USE_SERIAL.printf("Timestamp N/A\n");
+        }
+        krakenData.error = !readDataFromKraken();
       }
-
-      http.end();
-      delay(10000);
+      else
+      {
+        USE_SERIAL.printf("[HTTP] Error: %s\n", http.errorToString(httpCode).c_str());
+        krakenData.error = true;
+      }
+    } else {
+        USE_SERIAL.printf("[HTTP] Error: %s\n", http.errorToString(httpCode).c_str());
+    }
+    
+    writeToLcd();
+    
+    http.end();
+    delay(refreshIntervalSeconds * 1000);
   }
   else
   {
     USE_SERIAL.printf("[WIFI] Connecting...\n");
+    writeToLcd("Connecting Wifi", "Please wait...");
     delay(1000);
   }
 }
