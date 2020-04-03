@@ -157,7 +157,7 @@ Click on `Start Stream` and you should be able to see the live stream from the E
 
 [![Video](https://img.youtube.com/vi/kWpy9fVaD5E/0.jpg)](https://www.youtube.com/watch?v=kWpy9fVaD5E)
 
-## How it works?
+## How does it work?
 
 The code loaded on the board:
 1. Connects to the WiFi
