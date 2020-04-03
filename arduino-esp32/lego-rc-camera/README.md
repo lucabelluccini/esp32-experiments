@@ -137,9 +137,9 @@ Power on the original power pack by LEGO.
 
 ### Photos
 
-![Front](https://github.com/lucabelluccini/esp32-experiments/raw/master/lego-rc-camera/front.jpg)
+![Front](https://github.com/lucabelluccini/esp32-experiments/raw/master/arduino-esp32/lego-rc-camera/front.jpg)
 
-![Back](https://github.com/lucabelluccini/esp32-experiments/raw/master/lego-rc-camera/back.jpg)
+![Back](https://github.com/lucabelluccini/esp32-experiments/raw/master/arduino-esp32/lego-rc-camera/back.jpg)
 
 ## Connect to the LEGO RC car
 
