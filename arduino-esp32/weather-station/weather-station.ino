@@ -371,7 +371,7 @@ WeatherData weatherData;
 bool getDataFromWeather() {
   bool error = true;
   // Build weather url
-  String url = String(weatherUrl) + "&lat=" + ipapiData.lat + "&lon=" + ipapiData.lon;
+  String url = String(weatherUrl) + weatherApiKey + "&lat=" + ipapiData.lat + "&lon=" + ipapiData.lon;
   error = HttpGetHelper(url, weatherCaCert, weather);
   if(!error)
   {
