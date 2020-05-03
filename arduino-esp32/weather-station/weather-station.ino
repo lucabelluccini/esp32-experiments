@@ -304,7 +304,7 @@ bool HttpGetHelper(String iUrl, const char* iCaCert, DynamicJsonDocument& ioData
         else
         {
           USE_SERIAL.printf("[JSON] Deserialized!\n");
-          serializeJsonPretty(ipapi, USE_SERIAL);
+          serializeJsonPretty(ioData, USE_SERIAL);
           error = false;
         }
       }
