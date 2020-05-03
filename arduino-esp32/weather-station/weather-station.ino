@@ -280,18 +280,7 @@ void writeToLcd(const char * line1, const char * line2)
 //  lcd.printf("%.0f %c%.0f %c%.0f", krakenData.lastValue, (uint8_t)ARROWDOWN, krakenData.lowValue, (uint8_t)ARROWUP, krakenData.highValue);
 //}
 
-struct IpapiData {
-  bool   error;
-  bool   initialized;
-  String lat;
-  String lon;
-  String city;
-  String country;
-};
-
-IpapiData ipapiData;
-
-void GET(String iUrl, const char* iCaCert, DynamicJsonDocument& ioData)
+bool HttpGetHelper(String iUrl, const char* iCaCert, DynamicJsonDocument& ioData)
 {
   bool error = true;
   WiFiClientSecure client;
@@ -301,8 +290,8 @@ void GET(String iUrl, const char* iCaCert, DynamicJsonDocument& ioData)
   }
   HTTPClient http;
   http.setReuse(false);
-  USE_SERIAL.printf("[HTTP] Request to: %s\n", url);
-  if(http.begin(client, url)) {
+  USE_SERIAL.printf("[HTTP] Request to: %s\n", iUrl.c_str());
+  if(http.begin(client, iUrl)) {
     const int httpCode = http.GET();
     if(httpCode > 0) {
       if(httpCode == HTTP_CODE_OK) {
@@ -335,6 +324,16 @@ void GET(String iUrl, const char* iCaCert, DynamicJsonDocument& ioData)
   return error;
 }
 
+struct IpapiData {
+  bool   error;
+  bool   initialized;
+  String lat;
+  String lon;
+  String city;
+  String country;
+};
+
+IpapiData ipapiData;
 
 bool getDataFromIpapi() {
   bool error = true;
@@ -344,46 +343,16 @@ bool getDataFromIpapi() {
   }
   else
   {
-    WiFiClientSecure client;
-    client.setCACert(ipapiCaCert);
-    HTTPClient http;
-    http.setReuse(false);
-    USE_SERIAL.printf("[HTTP] Request to: %s\n", ipapiUrl);
-    if(http.begin(client, ipapiUrl)) {
-      const int httpCode = http.GET();
-      if(httpCode > 0) {
-        if(httpCode == HTTP_CODE_OK) {
-          USE_SERIAL.printf("[HTTP] Response: 200 OK\n");
-          USE_SERIAL.printf("[JSON] Deserializing...\n");
-          DeserializationError jsonError = deserializeJson(ipapi, http.getString().c_str());
-          if (jsonError) {
-            USE_SERIAL.printf("[JSON] Error deserializing error: %s\n", jsonError.c_str());
-          }
-          else
-          {
-            USE_SERIAL.printf("[JSON] Deserialized!\n");
-            ipapiData.lat = String((double)ipapi["latitude"], 3);
-            ipapiData.lon = String((double)ipapi["longitude"], 3);
-            ipapiData.city = String((const char*)ipapi["city"]);
-            ipapiData.country = String((const char*)ipapi["country_name"]);
-            USE_SERIAL.printf("[JSON] Decoded data: %s %s %s %s\n", ipapiData.lat.c_str(), ipapiData.lon.c_str(), ipapiData.city.c_str(), ipapiData.country.c_str());
-            error = false;
-            ipapiData.initialized = true;
-            serializeJsonPretty(ipapi, USE_SERIAL);
-          }
-        }
-        else
-        {
-          USE_SERIAL.printf("[HTTP] Response: %s\n", http.errorToString(httpCode).c_str());
-        }
-      } else {
-          USE_SERIAL.printf("[HTTP] Error: %s\n", http.errorToString(httpCode).c_str());
-      }
-      http.end();
-    }
-    else
+    error = HttpGetHelper(ipapiUrl, ipapiCaCert, ipapi);
+    if(!error)
     {
-      USE_SERIAL.printf("[HTTP] Error: unable to setup an HTTPS connection\n");
+      ipapiData.lat = String((double)ipapi["latitude"], 3);
+      ipapiData.lon = String((double)ipapi["longitude"], 3);
+      ipapiData.city = String((const char*)ipapi["city"]);
+      ipapiData.country = String((const char*)ipapi["country_name"]);
+      USE_SERIAL.printf("[JSON] Decoded data: %s %s %s %s\n", ipapiData.lat.c_str(), ipapiData.lon.c_str(), ipapiData.city.c_str(), ipapiData.country.c_str());
+      error = false;
+      ipapiData.initialized = true;
     }
   }
   ipapiData.error = error;
@@ -401,48 +370,17 @@ WeatherData weatherData;
 
 bool getDataFromWeather() {
   bool error = true;
-  WiFiClientSecure client;
-  client.setCACert(weatherCaCert);
-  HTTPClient http;
-  http.setReuse(false);
   // Build weather url
-  String url = String(weatherUrl) + weatherApiKey + "&lat=" + ipapiData.lat + "&lon=" + ipapiData.lon;
-  USE_SERIAL.printf("[HTTP] Request to: %s\n", url.c_str());
-  if(http.begin(client, url)) {
-    const int httpCode = http.GET();
-    if(httpCode > 0) {
-      if(httpCode == HTTP_CODE_OK) {
-        USE_SERIAL.printf("[HTTP] Response: 200 OK\n");
-        USE_SERIAL.printf("[JSON] Deserializing...\n");
-        DeserializationError jsonError = deserializeJson(weather, http.getString().c_str());
-        if (jsonError) {
-          USE_SERIAL.printf("[JSON] Error deserializing error: %s\n", jsonError.c_str());
-        }
-        else
-        {
-          USE_SERIAL.printf("[JSON] Deserialized!\n");
-          USE_SERIAL.printf("[JSON] dt=%ul\n", (unsigned long)weather["dt"]);
-          weatherData.dt = (unsigned long)weather["dt"];
-          USE_SERIAL.printf("[JSON] timezone=%ld\n", (long)weather["timezone"]);
-          weatherData.timezone = (long)weather["timezone"];
-          USE_SERIAL.printf("[JSON] Decoded data: %ul %ld\n", weatherData.dt, weatherData.timezone);
-          error = false;
-          weatherData.initialized = true;
-          serializeJsonPretty(weather, USE_SERIAL);
-        }
-      }
-      else
-      {
-        USE_SERIAL.printf("[HTTP] Response: %s\n", http.errorToString(httpCode).c_str());
-      }
-    } else {
-        USE_SERIAL.printf("[HTTP] Error: %s\n", http.errorToString(httpCode).c_str());
-    }
-    http.end();
-  }
-  else
+  String url = String(weatherUrl) + "&lat=" + ipapiData.lat + "&lon=" + ipapiData.lon;
+  error = HttpGetHelper(url, weatherCaCert, weather);
+  if(!error)
   {
-    USE_SERIAL.printf("[HTTP] Error: uanble to setup an HTTPS connection\n");
+    USE_SERIAL.printf("[JSON] Deserialized!\n");
+    weatherData.dt = (unsigned long)weather["dt"];
+    weatherData.timezone = (long)weather["timezone"];
+    USE_SERIAL.printf("[JSON] Decoded data: %ul %ld\n", weatherData.dt, weatherData.timezone);
+    error = false;
+    weatherData.initialized = true;
   }
   return error;
 }
